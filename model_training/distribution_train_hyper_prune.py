@@ -106,48 +106,6 @@ def trainModel(X, y, n_trees=100, from_pkl=False, pkl_filename='None', save_rf_m
     return clf
 
 
-def genLeafClusterMap(X_train, leaf_obs_map_arr,  leaf_class_map_arr, prune=False, num_to_prune=1):
-    leaf_kde_map_arr = []
-    for tree_num, l_map in enumerate(leaf_obs_map_arr):
-        obs_indices = []
-        num_arr = []
-        leaf_kde_map = {}
-        leaves = []
-        for leaf, obs_ids in l_map.items():
-            num_obs_l = len(obs_ids)
-            obs_indices.extend(obs_ids)
-            num_arr.append(num_obs_l)
-            leaves.append(leaf)
-
-        X_train_sorted = X_train[obs_indices, :]
-        k = X_train_sorted.shape[1]
-        idx = 0
-        leaf = 0
-        start_time = time.time()
-        for ele in num_arr:
-            means = np.mean(X_train_sorted[idx:idx+ele, :], axis=0)
-            if ele <= 1:
-                var = np.ones(k)
-            else:
-                var = np.var(X_train_sorted[idx:idx+ele, :], axis=0)
-                #var = (float(ele) / float(ele-1)) * np.var(X_train_sorted[idx:idx+ele, :], axis=0)
-            '''
-            if (var==0).any():
-                term1 = 0
-            else:
-                term1 = np.sum(np.log(np.sqrt(var)))
-            '''
-            var[var==0] = 1
-            term1 = np.sum(np.log(np.sqrt(var)))
-            leaf_kde_map[leaf] = (means.tolist(), inverse(var).tolist(), term1, ele, leaf_class_map_arr[tree_num][leaves[leaf]])
-            idx += ele
-
-            leaf+=1
-        print(time.time() - start_time, flush=True)
-        print(tree_num, flush=True)
-        leaf_kde_map_arr.append(leaf_kde_map)
-    return leaf_kde_map_arr
-
 
 def getSamplesInLeaves(X_train, y_train, model, num_estimators, importances, X_transformed):
     bbox_min = np.amin(X_train, axis=0)
@@ -162,11 +120,6 @@ def getSamplesInLeaves(X_train, y_train, model, num_estimators, importances, X_t
         bbox.append(99999)
 
     leaf_kde_map_arr = []
-    #leaves_matrix = model.apply(X_train)
-    #num_estimators = leaves_matrix.shape[1]
-    #leaf_class_map_arr2 = []
-    print("num estimators: ")
-    print(num_estimators, flush=True)
 
     k = X_train.shape[1]
 
@@ -190,9 +143,6 @@ def getSamplesInLeaves(X_train, y_train, model, num_estimators, importances, X_t
         indices2 = index_list[tree_num]
         indices = list(set(list(indices2)))
         indices.sort()
-        #indices = list(main_indices.difference(indices2))       
-        print('tree', flush=True)
-        print(tree_num, flush=True)
         clf = model.estimators_[tree_num]        
         leaf_class_map = {}
         leaf_obs_map = {}
@@ -205,7 +155,6 @@ def getSamplesInLeaves(X_train, y_train, model, num_estimators, importances, X_t
         children_right = clf.tree_.children_right
         feature = clf.tree_.feature
         threshold = clf.tree_.threshold
-        #print('check 1', flush=True)
         leaf_obsnum_map = {}
         for iter1, leaf_id in enumerate(leaves_single_tree):
             obs_num = indices[iter1]
@@ -248,7 +197,6 @@ def getSamplesInLeaves(X_train, y_train, model, num_estimators, importances, X_t
             num_obs = len(obs)
             if num_obs < 0:
                 continue
-            #x = [obs[0]]
             transformed_obs_list = []
             for idl in  leaf_obsnum_map[leaf]:
                 transformed_obs_list.append(X_transformed[idl])
@@ -272,16 +220,6 @@ def getSamplesInLeaves(X_train, y_train, model, num_estimators, importances, X_t
             flag = 0
             if num_obs >= 0:
 
-                '''
-                hyperplane = []
-                for i in range(len(bbox)):
-                    if i%2 == 0:
-                        hyperplane.append(min_obs[int(i/2)])
-                    else:
-                        hyperplane.append(max_obs[int((i-1)/2)])
-                x = [obs[0]]
-                x = np.array(x)
-                '''
                 hyperplane  = [i for i in bbox]
                 x = [obs[0]]
                 x = np.array(x)
@@ -307,14 +245,6 @@ def getSamplesInLeaves(X_train, y_train, model, num_estimators, importances, X_t
                         if hyperplane[2*feature[node_id]] < actual_bbox[2*feature[node_id]]:
                             actual_bbox[2*feature[node_id]] = hyperplane[2*feature[node_id]] 
 
-                '''
-                for i in range(len(hyperplane)):
-                    if hyperplane[i] == 99999:
-                        hyperplane[i] = max_obs[int((i-1)/2)]
-                    elif hyperplane[i] == -99999:
-                        hyperplane[i] = min_obs[int(i/2)]
-                '''
-                #hyper_map[leaf] = np.array(hyperplane)
                 hyperplane_list.append(np.array(hyperplane))
                 mean_list.append(mean)
                 var_list.append(var)
@@ -323,45 +253,7 @@ def getSamplesInLeaves(X_train, y_train, model, num_estimators, importances, X_t
                 median_list.append(median)
                 mad_list.append(mad)
                 mean_t_list.append(mean_transformed)
-                #hyperclass_map[leaf] = clf.predict(x)[0]
     return  actual_bbox, np.array(hyperplane_list), np.array(class_list), np.array(card_list), np.array(mean_list), np.array(var_list), numerator_pooled / float(denominator_pooled), np.array(max_obs), np.array(min_obs), np.array(median_list), np.array(mad_list), np.array(mean_t_list)
-'''
-        print('check 2', flush=True)
-        for leaf, obss in leaf_obs_map.items():
-            num_obs = len(leaf_obs_map[leaf])
-            if num_obs > -1:
-                if leaf not in hyper_map:
-                    print('NO!!!!!!', flush=True)
-                hyperplane = hyper_map[leaf]
-                dk = int(len(hyperplane) / 2)
-                mean = []
-                var = []
-                inverse_var = []
-                for i in range(dk):
-                    if hyperplane[2*i+1] == actual_bbox[2*i+1]:
-                        mean.append(actual_bbox[2*i+1])
-                    elif hyperplane[2*i] == actual_bbox[2*i]:
-                        mean.append(actual_bbox[2*i])
-                    else:
-                        mean.append(float(hyperplane[2*i+1] + hyperplane[2*i]) / 2.0)
-                    I_squared = float(hyperplane[2*i+1] - hyperplane[2*i])**2
-                    sigma_squared = I_squared / alpha**2
-                    var.append( sigma_squared )
-                    inverse_var.append( 1.0 / sigma_squared )
-                
-                temp_list = [1]
-                num_obs = len(leaf_obs_map[leaf])
-                term1 = np.sum(np.log(np.sqrt(var)))
-                temp_list.extend( mean )
-                #temp_list.extend( np.mean(leaf_obs_map[leaf], axis=0).tolist() )
-                temp_list.extend( inverse_var )
-                temp_list.append( float(term1) )
-                temp_list.append( num_obs )
-                temp_list.append(leaf_class_map[leaf])
-                to_save_list.append(temp_list)
-            
-    return to_save_list
-'''
 
 def inverse(vec):
     inv_vec = np.where(vec > 0, 1 / vec, vec)
@@ -427,6 +319,9 @@ def parseCmdArgs():
 
     parser.add_argument('--numtrees', action='store', dest='num_trees',
                     help='Number of trees')
+    
+    parser.add_argument('--num_hyperplanes_post_prune', action='store', dest='num_hyperplanes_post_prune',
+                    help='Number of trees', default=65000)
 
     parser.add_argument('--numtest', action='store', dest='num_test', nargs='?', 
                     const=100, type=int, help='Number of test samples')
@@ -458,33 +353,19 @@ data_path_filename = os.path.join(file_dir, data_filename)
 save_poly_filename = os.path.join(file_dir, 'poly_' + data_string + '.json' )
 save_train_data = os.path.join(file_dir ,'train_' + data_filename)
 save_test_data = os.path.join(file_dir, 'test_' + data_filename)
-#rf_model_filename = os.path.join(file_dir, 'rf_'+ num_trees + data_string + '.joblib')
-rf_model_filename = '/data2/rf_100train_foo.joblib'
-rf_pkl_filename = '/data/foo_prune_transform_new/rf_100train_foo.joblib' 
+rf_model_filename = os.path.join(file_dir, 'rf_'+ num_trees + data_string + '.joblib')
 num_trees = int(num_trees)
 print('args parsed', flush=True)
-#label_column=100
-#X_train, y_train = load_csv('/data/foo_prune_transform_new/train_foo.csv', label_column)
-#X_test, y_test = load_csv('/data/foo_prune_transform_new/test_foo.csv', label_column)
 
-X, y =  load_csv('/data/foo_prune_transform_new/foo.csv', 0)
-
-y_list = y.tolist()
-y = [i-1 for i in y_list]
-y= np.array(y)
+X, y =  load_csv(data_path_filename, 0)
 
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=num_test, stratify=y, random_state=rand_num)
 
-
 concat_arr_train = np.c_[X_train, y_train]
 concat_arr_test = np.c_[X_test, y_test]
-np.savetxt("/data/foo_prune_transform_new/train_foo.csv", concat_arr_train, delimiter=",", fmt='%1.3f')
-np.savetxt("/data/foo_prune_transform_new/test_foo.csv", concat_arr_test, delimiter=",", fmt='%1.3f')
 
 
-
-print('test and train csv saved', flush=True)
 from_file=False
 if from_file:
     clf = trainModel(X_train, y_train, n_trees=num_trees, from_pkl=True, pkl_filename=rf_pkl_filename, save_rf_model=False)
@@ -515,63 +396,17 @@ importances = importances.tolist()
 importances.sort(reverse=True)
 print("importances: ")
 print (importances)
-#features.pop(0)
-#features.pop(0)
-#features.pop(0)
-#features.pop(0)
 
-#newa = importances.tolist()
-#newa.sort(reverse=True)
-#print(newa)
-#print(np.sum(newa))
 
-'''
-y_pred = clf.predict(X_test)
-score = accuracy_score(y_test, y_pred)
-print('RF accuracy: ', end='', flush=True)
-print(score, flush=True)
-
-hyper_filename = '/data/hyperrectangles_SUSY_maxdepth2.csv'
-bbox_filename= '/data/bbox_SUSY_maxdepth2.csv'
-hyperlist = readHyperList(hyper_filename)
-bbox = readBboxList(bbox_filename)
-var_list = readHyperList('/data/var_list.csv')
-median_list = readHyperList('/data/median_list.csv')
-mean_list = readHyperList('/data/mean_list.csv')
-mad_list = readHyperList('/data/mad_list.csv')
-pooled_var = readBboxList('/data/pooled.csv')
-card_list = readBboxList('/data/card_list.csv')
-class_list = readBboxList('/data/class_list.csv')
-pooled_var = np.array(pooled_var)
-'''
-#print("BBOX: ", end="")
-#print(bbox, flush=True)
 qt = QuantileTransformer(n_quantiles=100000)
 X_transformed = qt.fit_transform(X_train)
-#print("BBOX: ", end="")
-#print(bbox, flush=True)
 
 
 bbox, hyperlist, class_list, card_list, mean_list, var_list, pooled, max_list, min_list, median_list, mad_list, mean_t_list = getSamplesInLeaves(X_train, y_train,  clf, num_trees, importances, X_transformed)
-np.savetxt("/data/foo_prune_transform_new/hyperrectangles_foo_maxdepth.csv", hyperlist,  delimiter = ",", fmt='%1.3f')
-np.savetxt("/data/foo_prune_transform_new/mean_list.csv", mean_list,  delimiter = ",", fmt='%1.9f')
-np.savetxt("/data/foo_prune_transform_new/mean_t_list.csv", mean_t_list,  delimiter = ",", fmt='%1.9f')
-np.savetxt("/data/foo_prune_transform_new/pooled.csv", pooled,  delimiter = ",", fmt='%1.9f')
-np.savetxt("/data/foo_prune_transform_new/class_list.csv", class_list,  delimiter = ",", fmt='%1.3f')
-np.savetxt("/data/foo_prune_transform_new/card_list.csv", card_list,  delimiter = ",", fmt='%1.3f')
-np.savetxt("/data/foo_prune_transform_new/features.csv",features2,  delimiter = ",", fmt='%1.3f')
-#np.savetxt("/data/new/var_list.csv", var_list,  delimiter = ",", fmt='%1.9f')
-#np.savetxt("/data/new/max_list.csv", max_list,  delimiter = ",", fmt='%1.3f')
-#np.savetxt("/data/new/min_list.csv", min_list,  delimiter = ",", fmt='%1.3f')
-#np.savetxt("/data/new/median_list.csv", median_list,  delimiter = ",", fmt='%1.3f')
-#np.savetxt("/data/new/mad_list.csv", mad_list,  delimiter = ",", fmt='%1.3f')
-
-sys.exit()
-tot_list = []
-for lst in var_list:
-    temp = []
-    for i in features:
-        temp.append(lst[i])
-    tot_list.append(temp)
-
-#np.savetxt("/data/var_4f_list.csv", tot_list,  delimiter = ",", fmt='%1.9f')
+np.savetxt(data_path_filename+"hyperrectangles_foo_maxdepth.csv", hyperlist,  delimiter = ",", fmt='%1.3f')
+np.savetxt(data_path_filename+"mean_list.csv", mean_list,  delimiter = ",", fmt='%1.9f')
+np.savetxt(data_path_filename+"mean_t_list.csv", mean_t_list,  delimiter = ",", fmt='%1.9f')
+np.savetxt(data_path_filename+"pooled.csv", pooled,  delimiter = ",", fmt='%1.9f')
+np.savetxt(data_path_filename+"class_list.csv", class_list,  delimiter = ",", fmt='%1.3f')
+np.savetxt(data_path_filename+"card_list.csv", card_list,  delimiter = ",", fmt='%1.3f')
+np.savetxt(data_path_filename+"features.csv",features2,  delimiter = ",", fmt='%1.3f')
